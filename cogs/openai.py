@@ -7,7 +7,9 @@ Version: 5.5.0
 """
 import os
 from datetime import datetime, timedelta
-import openai
+from openai import OpenAI
+
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 import discord
 from discord.ext import commands
 from discord.ext.commands import Context
@@ -18,17 +20,16 @@ class OpenAI(commands.Cog, name="openai"):
         self.bot = bot
         self.user_history_map = {}
         self.user_history_timestamp = {}
-        #print(f'Message History: {self.message_history}')
+        #print(f'Message History: {self.user_history_map}')
 
     # Here you can just add your own commands, you'll always need to provide "self" as first parameter.
 
 
-
     @commands.hybrid_command(
-        name="ask3",
+        name="askgpt",
         description="OpenAI chatbot.",
     )
-    async def ask3(self, context: Context, prompt: str):
+    async def askgpt(self, context: Context, prompt: str):
 
         await context.send(f'Prompt: {prompt}')
         
@@ -58,21 +59,33 @@ class OpenAI(commands.Cog, name="openai"):
 
         curr_prompt = {'role': 'user', 'content': prompt}
         message_history.append(curr_prompt)
+        #print(f'Message History PRE: {message_history}')
+
+        response = client.chat.completions.create(model="gpt-4", messages=message_history, temperature=0, max_tokens=1000)
+
+        response_message = response.choices[0].message.content
+        print(f'Response Message: {response_message}')
+        response_message_length = len(response_message)
+        print(f'Message Length: {response_message_length}')
+
+        if response_message_length > 2000:
+            response_message_chunks = chunkstring(response_message, 1500)
+            for chunk in response_message_chunks:
+                print(f'Chunk Length: {len(chunk)}')
+                await context.send(f'```{chunk}```')
+        else:
+            await context.send(f'```{response_message}```')
+        
+        curr_response = {'role': 'system', 'content': response_message}
+        message_history.append(curr_response)
         print(f'Message History: {message_history}')
-
-        openai.api_key = os.environ.get("OPENAI_API_KEY")
-        response = openai.ChatCompletion.create(model="gpt-3.5-turbo", messages=message_history, temperature=0, max_tokens=1000)
-
-        print(f'Response: {response}')
-
-        for choice in response['choices']:
-            await context.send(choice['message']['content'])
-            curr_response = {'role': 'assistant', 'content': choice['message']['content']}
-            message_history.append(curr_response)
 
         self.user_history_map[author] = message_history
         self.user_history_timestamp[author] = datetime.now()
         
+
+def chunkstring(string, length):    
+    return (string[0+i:length+i] for i in range(0, len(string), length))
 
 
 # And then we finally add the cog to the bot so that it can load, unload, reload and use it's content.
